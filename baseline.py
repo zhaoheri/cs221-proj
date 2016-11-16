@@ -35,7 +35,7 @@ trainingNum = 0
 
 
 def readTrainingSet():
-    with open('trainingData', 'r') as f:
+    with open('data/trainingData', 'r') as f:
         lines = f.readlines()
         trainingNum = len(lines)
         for line in lines:
@@ -88,7 +88,7 @@ def getResult(strokes, bigramCost):
 
 
 def test():
-    with open('testingData', 'r') as f:
+    with open('data/testingData', 'r') as f:
         lines = f.readlines()
         correct = defaultdict(int)
         total = defaultdict(int)
