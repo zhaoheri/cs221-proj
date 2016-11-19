@@ -14,20 +14,33 @@ class Character:
                 direction = int(find.group(1))
                 is_pause = find.group(2)
                 polygon = [tuple(x.split(',')) for x in find.group(3).split(';') if x != '']
+                if not polygon:
+                    continue
                 stroke.add(direction, polygon)
                 if is_pause == 'P':
+                    stroke.build()
                     self.strokes.append(stroke)
                     stroke = Stroke()
 
 
 class Stroke:
     def __init__(self):
-        self.directions = []
-        self.polygons = []
+        self.directions = []    # list of direction
+        self.polygons = []  # list of polygon list
+        self.central = (0, 0)   # initial central point for this stroke
 
     def add(self, direction, polygon):
         self.directions.append(direction)
         self.polygons.append(polygon)
+
+    def build(self):
+        tmp = []
+        for polygon in self.polygons:
+            avg_x = sum([eval(x) for (x, y) in polygon]) / float(len(polygon))
+            avg_y = sum([eval(y) for (x, y) in polygon]) / float(len(polygon))
+            tmp.append((avg_x, avg_y))
+        self.central = (sum([x for (x, y) in tmp])/float(len(tmp)),
+                        sum([y for (x, y) in tmp])/float(len(tmp)))
 
 
 bigram = defaultdict(int)    # (stroke1, stroke2) -> cost
@@ -50,11 +63,11 @@ def readTrainingSet():
 
 class strokeReoderProblem(util.SearchProblem):
     def __init__(self, strokes, bigramCost):
-        self.strokes = [str(s.directions) for s in strokes]
+        self.strokes = strokes  # [str(s.directions) for s in strokes]
         self.bigramCost = bigramCost
 
     def startState(self):
-        return str((None, self.strokes))
+        return str((None, range(len(self.strokes))))
 
     def isEnd(self, state):
         state = eval(state)
@@ -62,20 +75,29 @@ class strokeReoderProblem(util.SearchProblem):
             return False
         return True if len(state[1]) == 0 else False
 
+    # state: (pre_index, left_index_list)
     def succAndCost(self, state):
         state = eval(state)
         result = []
-        pre_stroke = state[0]
-        left_strokes = state[1]
-        if pre_stroke is None:
-            result.append((left_strokes[0], str((left_strokes[0], left_strokes[1:])), 0))
+        pre_index = state[0]
+        left_index = state[1]
+        if pre_index is None:
+            result.append((left_index[0], str((left_index[0], left_index[1:])), 0))
         else:
-            for i in range(len(left_strokes)):
-                if self.bigramCost[(pre_stroke, left_strokes[i])] != 0:
-                    cost = self.bigramCost[(pre_stroke, left_strokes[i])]
+            for i in range(len(left_index)):
+                post_index = left_index[i]
+                pre_stroke = str(self.strokes[pre_index].directions)
+                post_stroke = str(self.strokes[post_index].directions)
+                if self.bigramCost[(pre_stroke, post_stroke)] != 0:
+                    cost = self.bigramCost[(pre_stroke, post_stroke)]
                 else:
                     cost = trainingNum
-                result.append((left_strokes[i], str((left_strokes[i], left_strokes[:i] + left_strokes[i+1:])), cost))
+                dist_cost = abs(self.strokes[pre_index].central[0] - self.strokes[post_index].central[0]) \
+                            + abs(self.strokes[pre_index].central[1] - self.strokes[post_index].central[1])
+                cost += dist_cost / float(0.3)
+                left_index_copy = left_index[:]
+                left_index_copy.remove(post_index)
+                result.append((post_index, str((post_index, left_index_copy)), cost))
         return result
 
 
@@ -97,10 +119,13 @@ def test():
             strokes_len = len(c.strokes)
             if strokes_len == 1:
                 print line
-            if strokes_len > 6 or strokes_len == 1 or strokes_len == 2:
+            if strokes_len > 7 or strokes_len == 1 or strokes_len == 2:
                 continue
             total[strokes_len] += 1
-            res = getResult(c.strokes, bigram)
+            res_index = getResult(c.strokes, bigram)
+            res = []
+            for idx in res_index:
+                res.append(str(c.strokes[idx].directions))
             ans = [str(s.directions) for s in c.strokes]
             if res == ans:
                 print 'correct!!! len(strokes) = %d' % len(res)
@@ -114,8 +139,10 @@ def test():
 readTrainingSet()
 # print bigram
 
-# test = ["#3PO:134,99;133,84;133,71;132,60;131,53;129,48;128,45;124,37;127,34;138,35;148,39;154,42;155,48;155,55;153,60;153,67;152,76;152,88;152,102;151,103;151,117;150,135;150,157;148,182;147,211;146,242;131,242;131,239;131,233;131,223;132,210;133,194;133,180;134,164;134,149;134,133;134,116","#1PO:168,120;176,118;185,115;194,112;203,110;210,109;216,109;215,109;224,111;230,114;234,120;230,122;221,125;206,128;196,130;186,132;176,133;166,134;155,134;144,134;144,123;152,123;160,122","#1PR:199,227;176,230;148,233;119,237;96,240;77,242;63,244;53,245;49,245;43,246;36,246;29,246;20,247;14,249;15,248;20,256;27,261;33,263;36,262;42,261;51,260;63,258;78,256;91,255;103,253;116,251;128,250;139,249;151,247;163,246;174,246;183,245;191,245;197,244;203,245;210,245;220,245;231,245;244,245;258,246;269,246;276,246;279,246;281,242;277,237;267,229;258,226;251,223;247,222;242,223;232,224;218,225;"]
-# c = Character(test)
+# char = ["#1NO:107,48;158,39;165,37;171,35;176,33;181,32;194,32;201,34;208,38;211,41;213,43;180,49;179,47;177,46;172,46;165,48;121,60;116,61;105,61;100,59;96,56;94,54;93,52;94,50;96,49;","#4PO:203,57;198,65;194,73;190,82;186,90;177,104;168,116;151,134;140,143;134,148;126,152;114,158;100,163;85,168;68,173;61,174;55,175;54,174;54,172;59,169;78,161;100,150;117,140;130,131;138,124;144,118;152,109;159,100;166,87;172,75;178,60;180,52;181,49;179,46;211,41;213,43;214,46;210,50;206,54;"]
+# c = Character(char)
+# print len(c.strokes)
+# print c.strokes[0].central
 # print [str(s.directions) for s in c.strokes] == getResult(c.strokes, bigram)
 
 test()
